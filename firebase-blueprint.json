@@ -1,0 +1,130 @@
+{
+  "entities": {
+    "Service": {
+      "title": "Service",
+      "description": "A nail or beauty service offered by Nailed By Nesh",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "price": { "type": "number" },
+        "duration": { "type": "number", "description": "Duration in minutes" }
+      },
+      "required": ["name", "category", "price"]
+    },
+    "Booking": {
+      "title": "Booking",
+      "description": "An appointment booking",
+      "type": "object",
+      "properties": {
+        "serviceIds": { "type": "array", "items": { "type": "string" } },
+        "serviceNames": { "type": "array", "items": { "type": "string" } },
+        "clientName": { "type": "string" },
+        "clientEmail": { "type": "string" },
+        "clientPhone": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "time": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "confirmed", "completed", "cancelled"] },
+        "depositPaid": { "type": "boolean" },
+        "totalPrice": { "type": "number" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "referenceNumber": { "type": "string" },
+        "proofOfPaymentSubmitted": { "type": "boolean" }
+      },
+      "required": ["serviceNames", "clientName", "clientEmail", "date", "time", "status", "referenceNumber"]
+    },
+    "Promotion": {
+      "title": "Promotion",
+      "description": "A customized discount/promotional offer by the studio",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "discountValue": { "type": "string" },
+        "promoCode": { "type": "string" },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "description", "active"]
+    },
+    "Client": {
+      "title": "Client",
+      "description": "A client of Nailed By Nesh",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "notes": { "type": "string" },
+        "lastBooking": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "email"]
+    },
+    "Expense": {
+      "title": "Expense",
+      "description": "A business expense",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "amount": { "type": "number" },
+        "category": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "description": { "type": "string" }
+      },
+      "required": ["title", "amount", "date"]
+    },
+    "GalleryImage": {
+      "title": "GalleryImage",
+      "description": "An image in the inspiration gallery",
+      "type": "object",
+      "properties": {
+        "url": { "type": "string", "description": "Base64 or URL of the image" },
+        "name": { "type": "string", "description": "Name/design of the nail art" },
+        "price": { "type": "number", "description": "Price of the design option" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["url"]
+    },
+    "AppSettings": {
+      "title": "AppSettings",
+      "description": "Global application configuration",
+      "type": "object",
+      "properties": {
+        "bookingPolicy": { "type": "string" },
+        "cancellationPolicy": { "type": "string" },
+        "galleryImages": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  },
+  "firestore": {
+    "/services/{serviceId}": {
+      "schema": "Service",
+      "description": "Collection of available services"
+    },
+    "/bookings/{bookingId}": {
+      "schema": "Booking",
+      "description": "Collection of appointments"
+    },
+    "/clients/{clientId}": {
+      "schema": "Client",
+      "description": "Collection of client records"
+    },
+    "/expenses/{expenseId}": {
+      "schema": "Expense",
+      "description": "Collection of business expenses"
+    },
+    "/gallery/{imageId}": {
+      "schema": "GalleryImage",
+      "description": "Collection of gallery images"
+    },
+    "/promotions/{promoId}": {
+      "schema": "Promotion",
+      "description": "Collection of studio promotions shown to clients"
+    },
+    "/settings/app": {
+      "schema": "AppSettings",
+      "description": "Global application settings"
+    }
+  }
+}

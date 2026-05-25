@@ -1,0 +1,9 @@
+{
+  "name": "Remix: Nailed By Nesh",
+  "description": "A professional booking and management platform for Nailed By Nesh nail technician and beautician services.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
+}

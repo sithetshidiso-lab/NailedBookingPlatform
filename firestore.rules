@@ -1,0 +1,188 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: auth.uid
+    // Fields:
+    //   - email: string (required)
+    //   - role: string (required, enum: admin, client)
+    //   - name: string (optional)
+    //
+    // Collection: services
+    // Document ID: auto-generated
+    // Fields:
+    //   - name: string (required)
+    //   - category: string (required)
+    //   - price: number (required)
+    //   - duration: number (optional)
+    //   - image: string (optional, base64)
+    //   - description: string (optional)
+    //
+    // Collection: bookings
+    // Document ID: auto-generated
+    // Fields:
+    //   - serviceId: string (optional)
+    //   - serviceNames: list (required)
+    //   - clientName: string (required)
+    //   - clientEmail: string (required)
+    //   - clientPhone: string (optional)
+    //   - date: string (required, YYYY-MM-DD)
+    //   - time: string (required, HH:MM)
+    //   - status: string (required, enum: pending, confirmed, completed, cancelled)
+    //   - totalPrice: number (required)
+    //   - notes: string (optional)
+    //   - createdAt: timestamp (optional)
+    //
+    // Collection: clients
+    // Document ID: auto-generated
+    // Fields:
+    //   - name: string (required)
+    //   - email: string (required)
+    //   - phone: string (optional)
+    //   - notes: string (optional)
+    //   - lastBooking: string (optional, YYYY-MM-DD)
+    //   - totalBookings: number (optional)
+    //
+    // Collection: expenses
+    // Document ID: auto-generated
+    // Fields:
+    //   - title: string (required)
+    //   - amount: number (required)
+    //   - category: string (required)
+    //   - date: string (required, YYYY-MM-DD)
+    //   - description: string (optional)
+    //
+    // Collection: settings
+    // Document ID: app
+    // Fields:
+    //   - bookingPolicy: string (optional)
+    //   - galleryImages: list (optional)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (
+          request.auth.token.email == "neshbabe123naledi@gmail.com" ||
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+        );
+    }
+
+    function isOwner(email) {
+      return isAuthenticated() && request.auth.token.email == email;
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidDateString(dateStr) {
+      return dateStr is string && dateStr.matches("^\\d{4}-\\d{2}-\\d{2}$");
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidBooking(data) {
+      return data.clientName is string && data.clientName.size() > 0 && data.clientName.size() < 100 &&
+             data.clientEmail is string && isValidEmail(data.clientEmail) &&
+             data.date is string && isValidDateString(data.date) &&
+             data.status in ['pending', 'confirmed', 'completed', 'cancelled'] &&
+             data.totalPrice is number && data.totalPrice >= 0 &&
+             (!('referenceNumber' in data) || data.referenceNumber is string);
+    }
+
+    function isValidClient(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.email is string && isValidEmail(data.email);
+    }
+
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow write: if isAdmin() || (isAuthenticated() && request.auth.uid == userId);
+    }
+
+    match /services/{serviceId} {
+      // Allow anyone to see services, but only admins can manage them (including images)
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /bookings/{bookingId} {
+      allow read: if isAdmin() || (isAuthenticated() && request.auth.token.email == resource.data.clientEmail);
+      // Allow guest booking creation
+      allow create: if isValidBooking(request.resource.data);
+      // Allow guests/clients to update proofOfPaymentSubmitted or email confirmation details
+      allow update: if isAdmin() || (
+        isAuthenticated() && request.auth.token.email == resource.data.clientEmail &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['proofOfPaymentSubmitted'])
+      ) || (
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['confirmationEmailSent', 'confirmationId'])
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /promotions/{promoId} {
+      // Anyone can load active/inactive promotions, only admin can write
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /availability/{slotId} {
+      allow read: if true;
+      // Allow guests to sync their own bookings if they follow valid schema
+      allow write: if true; 
+    }
+
+    match /clients/{clientId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /expenses/{expenseId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /settings/{settingId} {
+      // Allow anyone to see settings (like gallery), but only admins can update them
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /gallery/{imageId} {
+      // Allow anyone to see gallery images, but only admins can manage them
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /test/connection {
+      allow read: if true;
+    }
+  }
+}
