@@ -73,12 +73,22 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isSuperadmin() {
+      return isAuthenticated() &&
+        (
+          exists(/databases/$(database)/documents/superadmin/$(request.auth.token.email)) ||
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'superadmin')
+        );
+    }
+
     function isAdmin() {
       return isAuthenticated() &&
         (
-          request.auth.token.email == "neshbabe123naledi@gmail.com" ||
+          isSuperadmin() ||
           (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+           (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'superadmin'))
         );
     }
 
@@ -118,6 +128,13 @@ service cloud.firestore {
     function isValidClient(data) {
       return data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
              data.email is string && isValidEmail(data.email);
+    }
+
+    // ===============================================================
+    // Global Superadmin Override Pattern
+    // ===============================================================
+    match /{document=**} {
+      allow read, write: if isSuperadmin();
     }
 
     // ===============================================================
@@ -183,6 +200,10 @@ service cloud.firestore {
 
     match /test/connection {
       allow read: if true;
+    }
+
+    match /superadmin/{email} {
+      allow read, write: if isSuperadmin();
     }
   }
 }

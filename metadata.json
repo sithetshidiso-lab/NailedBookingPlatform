@@ -1,6 +1,6 @@
 {
-  "name": "Remix: Nailed By Nesh",
-  "description": "A professional booking and management platform for Nailed By Nesh nail technician and beautician services.",
+  "name": "Qflow",
+  "description": "A professional white-label SaaS booking and management platform.",
   "requestFramePermissions": [
     "camera",
     "microphone",

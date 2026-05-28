@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { db, auth, googleProvider } from './firebase';
 import { signInWithPopup, onAuthStateChanged, User } from 'firebase/auth';
-import { collection, onSnapshot, query, addDoc, serverTimestamp, getDocs, writeBatch, doc, setDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, addDoc, serverTimestamp, getDocs, writeBatch, doc, setDoc, getDoc } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -16,6 +16,7 @@ import { INITIAL_SERVICES } from './constants';
 import { Service, Client } from './types';
 import { handleFirestoreError, OperationType } from './lib/firebase-utils';
 import { motion, AnimatePresence } from 'motion/react';
+import { tenant } from './tenant';
 
 type AdminTab = 'dashboard' | 'bookings' | 'calendar' | 'clients' | 'expenses' | 'services' | 'settings';
 
@@ -34,16 +35,43 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setUser(user);
       if (user) {
-        const isUserAdmin = user.email === 'neshbabe123naledi@gmail.com';
-        setIsAdmin(isUserAdmin);
         setIsAuthPageOpen(false);
+        let finalRole = 'client';
+
+        // Check if user is sithetshidiso@gmail.com and register as superadmin
+        if (user.email === 'sithetshidiso@gmail.com') {
+          finalRole = 'superadmin';
+          try {
+            await setDoc(doc(db, 'superadmin', 'sithetshidiso@gmail.com'), {
+              role: 'superadmin',
+              createdAt: new Date().toISOString()
+            }, { merge: true });
+          } catch (e) {
+            console.error('Error bootstrapping superadmin collection:', e);
+          }
+        } else {
+          try {
+            const userDoc = await getDoc(doc(db, 'users', user.uid));
+            if (userDoc.exists()) {
+              const uData = userDoc.data();
+              if (uData.role === 'admin' || uData.role === 'superadmin') {
+                finalRole = uData.role;
+              }
+            }
+          } catch (e) {
+            console.error('Error checking user role:', e);
+          }
+        }
+
+        const isUserAdmin = finalRole === 'admin' || finalRole === 'superadmin';
+        setIsAdmin(isUserAdmin);
         
         // Sync user to Firestore to ensure rules work
         try {
           await setDoc(doc(db, 'users', user.uid), {
             email: user.email,
             name: user.displayName,
-            role: isUserAdmin ? 'admin' : 'client',
+            role: finalRole,
             lastLogin: new Date().toISOString()
           }, { merge: true });
         } catch (e) {
@@ -168,7 +196,7 @@ export default function App() {
       <div className="flex items-center justify-center min-h-screen bg-zinc-950 text-white">
         <div className="animate-pulse flex flex-col items-center">
           <div className="w-16 h-16 bg-purple-600 rounded-full mb-4"></div>
-          <p className="text-xl font-medium">Nailed By Nesh...</p>
+          <p className="text-xl font-medium">{tenant.businessName}...</p>
         </div>
       </div>
     );
@@ -203,7 +231,7 @@ export default function App() {
               <div className="absolute inset-x-0 bottom-0 top-0 bg-gradient-to-t from-primary/5 to-transparent pointer-events-none" />
             </div>
             <h1 className="text-xl font-normal tracking-tight text-foreground sm:text-2xl font-serif">
-              Nailed By Nesh
+              {tenant.businessName}
             </h1>
           </div>
 
@@ -370,7 +398,7 @@ export default function App() {
                 {/* Sparkle Badge */}
                 <div className="inline-flex items-center gap-1.5 px-4 h-8 bg-violet-950/40 border border-violet-800/40 rounded-full shadow-[0_2px_10px_rgba(0,0,0,0.1)]">
                   <span className="text-[10px] tracking-[0.18em] font-extrabold uppercase text-[#c084fc] flex items-center gap-1.5">
-                    ✨ THE NAIL MAGICIAN · EDENVALE
+                    {tenant.starEndorsement}
                   </span>
                 </div>
 
@@ -381,13 +409,13 @@ export default function App() {
 
                 {/* Subheading text */}
                 <p className="text-muted-foreground text-sm sm:text-base md:text-lg max-w-2xl mx-auto leading-relaxed">
-                  Hand-crafted gel, acrylic and custom nail art by Nesh — designed to make your hands the most enchanting thing in the room.
+                  {tenant.description}
                 </p>
 
                 {/* CTAs */}
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
                   <a 
-                    href="https://wa.me/27692981893?text=Hi%20Nesh!%20I%20saw%20your%20design%20portal%20and%20I'd%20like%20to%20book%20a%20magical%20nail%20session." 
+                    href={`https://wa.me/27692981893?text=Hi!%20I%20saw%20your%20design%20portal%20and%20I'd%20like%20to%20book%20a%20magical%20session%20on%20${tenant.businessName}.`} 
                     target="_blank" 
                     rel="noopener noreferrer" 
                     className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-[#1ade6e] hover:bg-[#16c461] text-[#05020c] font-black text-sm rounded-full px-8 py-4 shadow-xl shadow-green-500/10 transition-all hover:scale-[1.02] active:scale-95"
@@ -414,7 +442,7 @@ export default function App() {
                     <Star className="w-3.5 h-3.5 fill-current" />
                   </div>
                   <span className="opacity-30">|</span>
-                  <a href="tel:0692981893" className="hover:text-primary transition-colors font-mono tracking-wider">069 298 1893</a>
+                  <a href={`tel:${tenant.phone}`} className="hover:text-primary transition-colors font-mono tracking-wider">{tenant.phone}</a>
                 </div>
               </div>
 
@@ -424,11 +452,11 @@ export default function App() {
                 <div className="space-y-2">
                   <span className="text-[10px] sm:text-xs font-bold text-primary uppercase tracking-[0.2em] block font-mono">MEET THE ARTIST</span>
                   <h3 className="text-3xl sm:text-4xl font-normal font-serif text-foreground">
-                    Hi, I'm <span className="italic text-primary">Nesh.</span>
+                    Hi, I'm <span className="italic text-primary">{tenant.artistName}.</span>
                   </h3>
                 </div>
                 <p className="text-muted-foreground text-sm sm:text-base leading-relaxed max-w-2xl font-medium">
-                  I treat every set like a tiny piece of magic — clean prep, healthy nails and designs you’ll actually want to show off. From a soft natural look to full-on glitter, foils and 3D drama, I build it with you in the chair, right here in Edenvale.
+                  I treat every set like a tiny piece of magic — clean prep, healthy nails and designs you’ll actually want to show off. From a soft natural look to full-on glitter, foils and 3D drama, I build it with you in the chair, right here in the styling lounge.
                 </p>
                 <div className="flex flex-wrap gap-2 pt-2">
                   {['Healthy prep', 'Long-lasting wear', 'Custom designs', 'Cozy studio vibe'].map((feature) => (
@@ -446,7 +474,7 @@ export default function App() {
                   <Sparkles className="w-6 h-6 text-primary mb-1.5 animate-[pulse_3s_infinite]" />
                   <span className="text-[9px] tracking-[0.2em] font-black text-primary/50 uppercase">THE PORTFOLIO</span>
                   <h4 className="text-base sm:text-lg font-normal font-serif text-foreground mt-0.5 leading-tight">
-                    Nailed By Nesh
+                    {tenant.businessName}
                   </h4>
                   <div className="absolute inset-2 rounded-full border border-dashed border-primary/10 pointer-events-none animate-[spin_100s_linear_infinite]" />
                 </div>
@@ -474,11 +502,11 @@ export default function App() {
       {!isAdmin && (
         <footer className="border-t border-border py-8 sm:py-12 mt-12 sm:mt-20">
           <div className="container mx-auto px-4 text-center space-y-4">
-            <p className="text-muted-foreground text-sm font-medium">© 2026 Nailed By Nesh. All rights reserved.</p>
+            <p className="text-muted-foreground text-sm font-medium">© 2026 {tenant.businessName}. All rights reserved.</p>
             <div className="flex flex-col sm:flex-row justify-center gap-2 sm:gap-6 text-muted-foreground text-xs font-semibold uppercase tracking-widest">
-              <span>069 298 1893</span>
+              <span>{tenant.phone}</span>
               <span className="hidden sm:inline">•</span>
-              <span>number two, Central Avenue, Eastleigh, 1609</span>
+              <span>{tenant.address}</span>
             </div>
           </div>
         </footer>

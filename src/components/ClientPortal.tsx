@@ -29,6 +29,7 @@ import {
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
 import { format, parseISO } from 'date-fns';
+import { tenant } from '../tenant';
 
 interface ClientPortalProps {
   user: FirebaseUser;
@@ -109,9 +110,9 @@ export function ClientPortal({ user, services, onLogout, isGalleryOpen, setIsGal
       });
       
       const parsedServices = booking.serviceNames.join(', ');
-      const textMessage = `Hi Nesh! Here is my proof of payment for booking *${booking.referenceNumber}* for R${booking.totalPrice} (${parsedServices}) on ${booking.date} at ${booking.time}.`;
+      const textMessage = `Hi! Here is my proof of payment for booking *${booking.referenceNumber}* for R${booking.totalPrice} (${parsedServices}) on ${booking.date} at ${booking.time}.`;
       
-      const whatsappUrl = `https://wa.me/27692981893?text=${encodeURIComponent(textMessage)}`;
+      const whatsappUrl = `https://wa.me/${tenant.whatsappPhone}?text=${encodeURIComponent(textMessage)}`;
       
       toast.info('Sending proof of payment. This will open WhatsApp...');
       window.open(whatsappUrl, '_blank', 'referrer');
@@ -190,7 +191,7 @@ export function ClientPortal({ user, services, onLogout, isGalleryOpen, setIsGal
       } catch (availError) {
         console.error('Failed to sync availability:', availError);
       }
-      toast.success("Rescheduled successfully! Awaiting validation from Nesh.");
+      toast.success("Rescheduled successfully! Awaiting validation.");
       setRescheduleBookingId(null);
     } catch (e) {
       console.error(e);

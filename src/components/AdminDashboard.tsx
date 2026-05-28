@@ -19,6 +19,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import imageCompression from 'browser-image-compression';
+import { tenant } from '../tenant';
 
 interface AdminDashboardProps {
   services: Service[];
@@ -1572,8 +1573,8 @@ export function AdminDashboard({ services, initialTab = 'overview', onNavigate }
   const renderOverview = () => (
     <div className="space-y-6 sm:space-y-8">
         <div>
-          <h2 className="text-3xl font-black text-foreground tracking-tight">Welcome back, Nesh!</h2>
-          <p className="text-muted-foreground font-medium">Here's what's happening with your business today.</p>
+          <h2 className="text-3xl font-black text-foreground tracking-tight">Welcome back!</h2>
+          <p className="text-muted-foreground font-medium">Here's what's happening with {tenant.businessName} today.</p>
         </div>
         <div className="flex items-center gap-2 text-sm font-bold text-muted-foreground bg-muted/50 px-4 py-2 rounded-2xl border border-border">
           <CalendarIcon className="w-4 h-4 text-primary" />

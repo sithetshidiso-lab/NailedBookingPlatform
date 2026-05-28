@@ -16,6 +16,7 @@ import { sendConfirmationEmail } from '@/services/emailService';
 import { syncAvailability } from '@/lib/availability-utils';
 import { Checkbox } from '@/components/ui/checkbox';
 import { motion, AnimatePresence } from 'motion/react';
+import { tenant } from '../tenant';
 
 interface BookingPlatformProps {
   services: Service[];
@@ -309,15 +310,15 @@ export function BookingPlatform({
         proofOfPaymentSubmitted: true
       });
       const parsedServices = lastBookingData.serviceNames.join(', ');
-      const textMessage = `Hi Nesh! Here is my proof of payment for booking *${lastBookingData.referenceNumber || 'NBN-XXXXX'}* for R${lastBookingData.totalPrice} (${parsedServices}) on ${lastBookingData.date} at ${lastBookingData.time}.`;
-      const whatsappUrl = `https://wa.me/27692981893?text=${encodeURIComponent(textMessage)}`;
+      const textMessage = `Hi! Here is my proof of payment for booking *${lastBookingData.referenceNumber || 'NBN-XXXXX'}* for R${lastBookingData.totalPrice} (${parsedServices}) on ${lastBookingData.date} at ${lastBookingData.time}.`;
+      const whatsappUrl = `https://wa.me/${tenant.whatsappPhone}?text=${encodeURIComponent(textMessage)}`;
       window.open(whatsappUrl, '_blank', 'referrer');
       toast.success('Opening WhatsApp. Thank you!');
     } catch (e) {
       console.error(e);
       const parsedServices = lastBookingData.serviceNames.join(', ');
-      const textMessage = `Hi Nesh! Here is my proof of payment for booking *${lastBookingData.referenceNumber || 'NBN-XXXXX'}* for R${lastBookingData.totalPrice} (${parsedServices}) on ${lastBookingData.date} at ${lastBookingData.time}.`;
-      window.open(`https://wa.me/27692981893?text=${encodeURIComponent(textMessage)}`, '_blank', 'referrer');
+      const textMessage = `Hi! Here is my proof of payment for booking *${lastBookingData.referenceNumber || 'NBN-XXXXX'}* for R${lastBookingData.totalPrice} (${parsedServices}) on ${lastBookingData.date} at ${lastBookingData.time}.`;
+      window.open(`https://wa.me/${tenant.whatsappPhone}?text=${encodeURIComponent(textMessage)}`, '_blank', 'referrer');
     }
   };
 
@@ -373,7 +374,7 @@ export function BookingPlatform({
                   <span className="text-muted-foreground">Bank:</span>
                   <span className="text-foreground">First National Bank (FNB)</span>
                   <span className="text-muted-foreground">Account Holder:</span>
-                  <span className="text-foreground">Nailed By Nesh</span>
+                  <span className="text-foreground">{tenant.businessName}</span>
                   <span className="text-muted-foreground">Account Number:</span>
                   <span className="text-foreground">62908756345</span>
                   <span className="text-muted-foreground">Branch Code:</span>
@@ -725,7 +726,7 @@ export function BookingPlatform({
                                 <div className="flex-1 p-4 flex flex-col justify-between">
                                   <div>
                                     <h4 className="font-bold text-foreground leading-tight">{s.name}</h4>
-                                    <p className="text-[10px] text-muted-foreground mt-1 line-clamp-2">{s.description || 'Professional treatment by Nesh.'}</p>
+                                    <p className="text-[10px] text-muted-foreground mt-1 line-clamp-2">{s.description || 'Professional styling treatment.'}</p>
                                   </div>
                                   <div className="flex justify-between items-end">
                                     <div className="space-y-0.5">

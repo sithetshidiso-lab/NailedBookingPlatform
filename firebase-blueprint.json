@@ -2,7 +2,7 @@
   "entities": {
     "Service": {
       "title": "Service",
-      "description": "A nail or beauty service offered by Nailed By Nesh",
+      "description": "A nail or beauty service offered by the business",
       "type": "object",
       "properties": {
         "name": { "type": "string" },
@@ -50,7 +50,7 @@
     },
     "Client": {
       "title": "Client",
-      "description": "A client of Nailed By Nesh",
+      "description": "A client of the salon/platform",
       "type": "object",
       "properties": {
         "name": { "type": "string" },
@@ -60,6 +60,16 @@
         "lastBooking": { "type": "string", "format": "date-time" }
       },
       "required": ["name", "email"]
+    },
+    "SuperAdmin": {
+      "title": "SuperAdmin",
+      "description": "A super administrator with global system-wide privileges",
+      "type": "object",
+      "properties": {
+        "role": { "type": "string", "enum": ["superadmin"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["role"]
     },
     "Expense": {
       "title": "Expense",
@@ -125,6 +135,10 @@
     "/settings/app": {
       "schema": "AppSettings",
       "description": "Global application settings"
+    },
+    "/superadmin/{email}": {
+      "schema": "SuperAdmin",
+      "description": "Collection of super administrator list keyed by email address"
     }
   }
 }

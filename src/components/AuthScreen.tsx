@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Sparkles, Mail, Lock, User, Palette } from 'lucide-react';
 import { toast } from 'sonner';
+import { tenant } from '../tenant';
 
 interface AuthScreenProps {
   onBack?: () => void;
@@ -26,13 +27,13 @@ export function AuthScreen({ onBack }: AuthScreenProps) {
     try {
       const result = await signInWithPopup(auth, googleProvider);
       const user = result.user;
-      const isUserAdmin = user.email === 'neshbabe123naledi@gmail.com';
+      const isUserAdmin = user.email === 'sithetshidiso@gmail.com';
       
       // Update or create user record
       await setDoc(doc(db, 'users', user.uid), {
         email: user.email,
         name: user.displayName || 'Client',
-        role: isUserAdmin ? 'admin' : 'client',
+        role: isUserAdmin ? 'superadmin' : 'client',
         lastLogin: new Date().toISOString()
       }, { merge: true });
 
@@ -73,13 +74,13 @@ export function AuthScreen({ onBack }: AuthScreenProps) {
         const result = await createUserWithEmailAndPassword(auth, email, password);
         const user = result.user;
         await updateProfile(user, { displayName: fullName });
-        const isUserAdmin = user.email === 'neshbabe123naledi@gmail.com';
+        const isUserAdmin = user.email === 'sithetshidiso@gmail.com';
 
         // Add user profile to Firestore database
         await setDoc(doc(db, 'users', user.uid), {
           email: user.email,
           name: fullName,
-          role: isUserAdmin ? 'admin' : 'client',
+          role: isUserAdmin ? 'superadmin' : 'client',
           lastLogin: new Date().toISOString()
         }, { merge: true });
 
@@ -127,7 +128,7 @@ export function AuthScreen({ onBack }: AuthScreenProps) {
               {isSignUp ? 'Create Account' : 'Welcome Back'}
             </CardTitle>
             <CardDescription className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
-              {isSignUp ? 'Join Nailed By Nesh' : 'Access Your Personal Salon Space'}
+              {isSignUp ? `Join ${tenant.businessName}` : 'Access Your Personal Salon Space'}
             </CardDescription>
           </div>
         </CardHeader>
