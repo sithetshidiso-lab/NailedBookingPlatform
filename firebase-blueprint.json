@@ -122,6 +122,19 @@
         "cancellationPolicy": { "type": "string" },
         "galleryImages": { "type": "array", "items": { "type": "string" } }
       }
+    },
+    "User": {
+      "title": "User",
+      "description": "A global user account document mapped to their Auth UID",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "client", "superadmin"] },
+        "tenantId": { "type": "string", "description": "The associated tenantId slug if business-scoped" },
+        "lastLogin": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "name", "role"]
     }
   },
   "firestore": {
@@ -168,6 +181,10 @@
     "/superadmin/{email}": {
       "schema": "SuperAdmin",
       "description": "Collection of super administrator list keyed by email address"
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Collection of global user profiles used for role and tenant routing lookup"
     }
   }
 }
