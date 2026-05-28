@@ -16,7 +16,8 @@ import { sendConfirmationEmail } from '@/services/emailService';
 import { syncAvailability } from '@/lib/availability-utils';
 import { Checkbox } from '@/components/ui/checkbox';
 import { motion, AnimatePresence } from 'motion/react';
-import { tenant } from '../tenant';
+import { tenant, getTenantCollectionPath } from '../tenant';
+import { useTenant } from '../context/TenantContext';
 
 interface BookingPlatformProps {
   services: Service[];
@@ -35,6 +36,17 @@ export function BookingPlatform({
   isGalleryOpen = false, 
   setIsGalleryOpen 
 }: BookingPlatformProps) {
+  const { tenantId, tenantData } = useTenant();
+  const resolvedTenant = tenantData || {
+    ...tenant,
+    ownerEmail: "sithetshidiso@gmail.com",
+    slug: tenantId,
+    templateId: "default",
+    plan: "pro" as const,
+    createdAt: "",
+    isActive: true
+  };
+
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(startOfToday());
   const [selectedTime, setSelectedTime] = useState<string>('');
@@ -98,23 +110,23 @@ export function BookingPlatform({
   };
 
   useEffect(() => {
-    const q = query(collection(db, 'gallery'), orderBy('createdAt', 'desc'));
+    const q = query(collection(db, getTenantCollectionPath('gallery')), orderBy('createdAt', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const galleryData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as GalleryImage));
       setGallery(galleryData);
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'gallery');
+      handleFirestoreError(error, OperationType.LIST, getTenantCollectionPath('gallery'));
     });
     return () => unsubscribe();
   }, []);
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(doc(db, 'settings', 'app'), (doc) => {
+    const unsubscribe = onSnapshot(doc(db, getTenantCollectionPath('settings'), 'app'), (doc) => {
       if (doc.exists()) {
         setSettings(doc.data() as AppSettings);
       }
     }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'settings/app');
+      handleFirestoreError(error, OperationType.GET, getTenantCollectionPath('settings') + '/app');
     });
     return () => unsubscribe();
   }, []);
@@ -123,13 +135,13 @@ export function BookingPlatform({
     if (!selectedDate) return;
     
     const dateStr = format(selectedDate, 'yyyy-MM-dd');
-    const q = query(collection(db, 'availability'), where('date', '==', dateStr));
+    const q = query(collection(db, getTenantCollectionPath('availability')), where('date', '==', dateStr));
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const bookingsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any as Booking));
       setExistingBookings(bookingsData);
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'availability');
+      handleFirestoreError(error, OperationType.LIST, getTenantCollectionPath('availability'));
     });
 
     return () => unsubscribe();
@@ -177,7 +189,10 @@ export function BookingPlatform({
       const dateStr = format(selectedDate, 'yyyy-MM-dd');
       
       const randomSuffix = Math.random().toString(36).substring(2, 7).toUpperCase();
-      const refCode = `NBN-${randomSuffix}`;
+      const initials = resolvedTenant.businessName
+        ? resolvedTenant.businessName.split(/\s+/).map(w => w[0]).join('').substring(0, 3).toUpperCase()
+        : 'NBN';
+      const refCode = `${initials}-${randomSuffix}`;
 
       const bookingData: Omit<Booking, 'id'> = {
         serviceIds: selectedServiceIds,
@@ -202,7 +217,7 @@ export function BookingPlatform({
         return;
       }
 
-      const bookingDoc = await addDoc(collection(db, 'bookings'), bookingData);
+      const bookingDoc = await addDoc(collection(db, getTenantCollectionPath('bookings')), bookingData);
       
       // Sync to availability collection (publicly readable)
       try {
@@ -221,7 +236,7 @@ export function BookingPlatform({
       try {
         const emailResult = await sendConfirmationEmail({ ...bookingData, id: bookingDoc.id } as Booking);
         if (emailResult.success) {
-          await updateDoc(doc(db, 'bookings', bookingDoc.id), {
+          await updateDoc(doc(db, getTenantCollectionPath('bookings'), bookingDoc.id), {
             confirmationEmailSent: true,
             confirmationId: emailResult.confirmationId
           });
@@ -233,7 +248,7 @@ export function BookingPlatform({
       
       // Create or update client record (both admin and client portal submissions)
       {
-        const clientsRef = collection(db, 'clients');
+        const clientsRef = collection(db, getTenantCollectionPath('clients'));
         const clientQuery = query(clientsRef, where('email', '==', formData.email));
         const clientSnapshot = await getDocs(clientQuery);
         
@@ -250,7 +265,7 @@ export function BookingPlatform({
         } else {
           const clientDoc = clientSnapshot.docs[0];
           const clientData = clientDoc.data();
-          await updateDoc(doc(db, 'clients', clientDoc.id), {
+          await updateDoc(doc(db, getTenantCollectionPath('clients'), clientDoc.id), {
             name: formData.name,
             phone: formData.phone || clientData.phone || '',
             lastBooking: new Date().toISOString(),
@@ -306,19 +321,19 @@ export function BookingPlatform({
   const handleWhatsAppTrigger = async () => {
     if (!lastBookingData?.id) return;
     try {
-      await updateDoc(doc(db, 'bookings', lastBookingData.id), {
+      await updateDoc(doc(db, getTenantCollectionPath('bookings'), lastBookingData.id), {
         proofOfPaymentSubmitted: true
       });
       const parsedServices = lastBookingData.serviceNames.join(', ');
       const textMessage = `Hi! Here is my proof of payment for booking *${lastBookingData.referenceNumber || 'NBN-XXXXX'}* for R${lastBookingData.totalPrice} (${parsedServices}) on ${lastBookingData.date} at ${lastBookingData.time}.`;
-      const whatsappUrl = `https://wa.me/${tenant.whatsappPhone}?text=${encodeURIComponent(textMessage)}`;
+      const whatsappUrl = `https://wa.me/${resolvedTenant.whatsappPhone}?text=${encodeURIComponent(textMessage)}`;
       window.open(whatsappUrl, '_blank', 'referrer');
       toast.success('Opening WhatsApp. Thank you!');
     } catch (e) {
       console.error(e);
       const parsedServices = lastBookingData.serviceNames.join(', ');
       const textMessage = `Hi! Here is my proof of payment for booking *${lastBookingData.referenceNumber || 'NBN-XXXXX'}* for R${lastBookingData.totalPrice} (${parsedServices}) on ${lastBookingData.date} at ${lastBookingData.time}.`;
-      window.open(`https://wa.me/${tenant.whatsappPhone}?text=${encodeURIComponent(textMessage)}`, '_blank', 'referrer');
+      window.open(`https://wa.me/${resolvedTenant.whatsappPhone}?text=${encodeURIComponent(textMessage)}`, '_blank', 'referrer');
     }
   };
 
@@ -374,7 +389,7 @@ export function BookingPlatform({
                   <span className="text-muted-foreground">Bank:</span>
                   <span className="text-foreground">First National Bank (FNB)</span>
                   <span className="text-muted-foreground">Account Holder:</span>
-                  <span className="text-foreground">{tenant.businessName}</span>
+                  <span className="text-foreground">{resolvedTenant.businessName}</span>
                   <span className="text-muted-foreground">Account Number:</span>
                   <span className="text-foreground">62908756345</span>
                   <span className="text-muted-foreground">Branch Code:</span>

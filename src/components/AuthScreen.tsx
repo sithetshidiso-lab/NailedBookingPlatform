@@ -9,12 +9,24 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Sparkles, Mail, Lock, User, Palette } from 'lucide-react';
 import { toast } from 'sonner';
 import { tenant } from '../tenant';
+import { useTenant } from '../context/TenantContext';
 
 interface AuthScreenProps {
   onBack?: () => void;
 }
 
 export function AuthScreen({ onBack }: AuthScreenProps) {
+  const { tenantId, tenantData } = useTenant();
+  const resolvedTenant = tenantData || {
+    ...tenant,
+    ownerEmail: "sithetshidiso@gmail.com",
+    slug: tenantId,
+    templateId: "default",
+    plan: "pro" as const,
+    createdAt: "",
+    isActive: true
+  };
+
   const [isSignUp, setIsSignUp] = useState(false);
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
@@ -128,7 +140,7 @@ export function AuthScreen({ onBack }: AuthScreenProps) {
               {isSignUp ? 'Create Account' : 'Welcome Back'}
             </CardTitle>
             <CardDescription className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
-              {isSignUp ? `Join ${tenant.businessName}` : 'Access Your Personal Salon Space'}
+              {isSignUp ? `Join ${resolvedTenant.businessName}` : 'Access Your Personal Salon Space'}
             </CardDescription>
           </div>
         </CardHeader>

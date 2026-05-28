@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
-import { Calendar as CalendarIcon, LayoutDashboard, User as UserIcon, LogOut, Plus, Scissors, Users, CreditCard, TrendingUp, CalendarDays, Menu, X, Settings as SettingsIcon, ChevronRight, Image as ImageIcon, Sparkles, MessageCircle, Star } from 'lucide-react';
+import { Calendar as CalendarIcon, LayoutDashboard, User as UserIcon, LogOut, Plus, Scissors, Users, CreditCard, TrendingUp, CalendarDays, Menu, X, Settings as SettingsIcon, ChevronRight, Image as ImageIcon, Sparkles, MessageCircle, Star, Activity } from 'lucide-react';
 import { BookingPlatform } from './components/BookingPlatform';
 import { AdminDashboard } from './components/AdminDashboard';
 import { AuthScreen } from './components/AuthScreen';
@@ -16,13 +16,19 @@ import { INITIAL_SERVICES } from './constants';
 import { Service, Client } from './types';
 import { handleFirestoreError, OperationType } from './lib/firebase-utils';
 import { motion, AnimatePresence } from 'motion/react';
+import { useTenant } from './context/TenantContext';
 import { tenant } from './tenant';
+import { TenantSignup } from './components/TenantSignup';
+import { SuperAdminDashboard } from './components/SuperAdminDashboard';
+import { B2BLandingPage } from './components/B2BLandingPage';
 
 type AdminTab = 'dashboard' | 'bookings' | 'calendar' | 'clients' | 'expenses' | 'services' | 'settings';
 
 export default function App() {
+  const { tenantId, tenantData, loading: tenantLoading, isNotFound } = useTenant();
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isSuperadmin, setIsSuperadmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [services, setServices] = useState<Service[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
@@ -30,16 +36,34 @@ export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isGalleryOpen, setIsGalleryOpen] = useState(false);
   const [isAuthPageOpen, setIsAuthPageOpen] = useState(false);
+  const [isSignupOpen, setIsSignupOpen] = useState(() => {
+    return window.location.pathname === '/signup' || window.location.hash === '#signup';
+  });
+  const [isSuperadminPageOpen, setIsSuperadminPageOpen] = useState(() => {
+    return window.location.pathname === '/superadmin' || window.location.hash === '#superadmin';
+  });
+
+  const resolvedTenant = tenantData || {
+    ...tenant,
+    ownerEmail: "sithetshidiso@gmail.com",
+    slug: tenantId,
+    templateId: "default",
+    plan: "pro" as const,
+    createdAt: "",
+    isActive: true
+  };
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setUser(user);
-      if (user) {
+    if (tenantLoading) return;
+
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      setUser(currentUser);
+      if (currentUser) {
         setIsAuthPageOpen(false);
         let finalRole = 'client';
 
         // Check if user is sithetshidiso@gmail.com and register as superadmin
-        if (user.email === 'sithetshidiso@gmail.com') {
+        if (currentUser.email === 'sithetshidiso@gmail.com') {
           finalRole = 'superadmin';
           try {
             await setDoc(doc(db, 'superadmin', 'sithetshidiso@gmail.com'), {
@@ -49,13 +73,25 @@ export default function App() {
           } catch (e) {
             console.error('Error bootstrapping superadmin collection:', e);
           }
+        } else if (tenantData && tenantData.ownerEmail === currentUser.email) {
+          finalRole = 'admin';
         } else {
           try {
-            const userDoc = await getDoc(doc(db, 'users', user.uid));
+            const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
             if (userDoc.exists()) {
               const uData = userDoc.data();
               if (uData.role === 'admin' || uData.role === 'superadmin') {
                 finalRole = uData.role;
+              }
+            }
+
+            if (finalRole !== 'admin') {
+              const tenantUserDoc = await getDoc(doc(db, 'tenants', tenantId, 'users', currentUser.uid));
+              if (tenantUserDoc.exists()) {
+                const tuData = tenantUserDoc.data();
+                if (tuData.role === 'admin') {
+                  finalRole = 'admin';
+                }
               }
             }
           } catch (e) {
@@ -65,54 +101,88 @@ export default function App() {
 
         const isUserAdmin = finalRole === 'admin' || finalRole === 'superadmin';
         setIsAdmin(isUserAdmin);
+        setIsSuperadmin(finalRole === 'superadmin');
         
         // Sync user to Firestore to ensure rules work
         try {
-          await setDoc(doc(db, 'users', user.uid), {
-            email: user.email,
-            name: user.displayName,
+          const syncData: any = {
+            email: currentUser.email,
+            name: currentUser.displayName,
             role: finalRole,
             lastLogin: new Date().toISOString()
-          }, { merge: true });
+          };
+          if (tenantId) {
+            syncData.tenantId = tenantId;
+          }
+          await setDoc(doc(db, 'users', currentUser.uid), syncData, { merge: true });
         } catch (e) {
           console.error('Error syncing user:', e);
         }
       } else {
         setIsAdmin(false);
+        setIsSuperadmin(false);
       }
       setLoading(false);
     });
 
     return () => unsubscribe();
+  }, [tenantLoading, tenantId, tenantData]);
+
+  useEffect(() => {
+    const handleUrlChange = () => {
+      setIsSuperadminPageOpen(window.location.pathname === '/superadmin' || window.location.hash === '#superadmin');
+    };
+    window.addEventListener('popstate', handleUrlChange);
+    window.addEventListener('hashchange', handleUrlChange);
+    return () => {
+      window.removeEventListener('popstate', handleUrlChange);
+      window.removeEventListener('hashchange', handleUrlChange);
+    };
   }, []);
 
   useEffect(() => {
-    const q = query(collection(db, 'services'));
+    if (!loading && !tenantLoading && isSuperadminPageOpen) {
+      if (!user || !isSuperadmin) {
+        toast.error("Access denied. Redirecting to workspace...");
+        setIsSuperadminPageOpen(false);
+        // Redirect to /dashboard as requested
+        window.history.replaceState(null, '', '/dashboard');
+        window.dispatchEvent(new Event('popstate'));
+      }
+    }
+  }, [loading, tenantLoading, isSuperadminPageOpen, isSuperadmin, user]);
+
+  useEffect(() => {
+    if (tenantLoading || !tenantId) return;
+
+    const q = query(collection(db, 'tenants', tenantId, 'services'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const servicesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Service));
       setServices(servicesData);
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'services');
+      handleFirestoreError(error, OperationType.LIST, `tenants/${tenantId}/services`);
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [tenantLoading, tenantId]);
 
   useEffect(() => {
+    if (tenantLoading || !tenantId) return;
+
     if (!isAdmin) {
       setClients([]);
       return;
     }
-    const q = query(collection(db, 'clients'));
+    const q = query(collection(db, 'tenants', tenantId, 'clients'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const clientsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Client));
       setClients(clientsData);
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'clients');
+      handleFirestoreError(error, OperationType.LIST, `tenants/${tenantId}/clients`);
     });
 
     return () => unsubscribe();
-  }, [isAdmin]);
+  }, [tenantLoading, tenantId, isAdmin]);
 
   const handleLogin = async () => {
     try {
@@ -135,11 +205,11 @@ export default function App() {
   };
 
   const seedServices = async () => {
-    if (!isAdmin) return;
+    if (!isAdmin || !tenantId) return;
     try {
       const batch = writeBatch(db);
       INITIAL_SERVICES.forEach((service) => {
-        const newDocRef = doc(collection(db, 'services'));
+        const newDocRef = doc(collection(db, 'tenants', tenantId, 'services'));
         batch.set(newDocRef, service);
       });
       await batch.commit();
@@ -191,13 +261,133 @@ export default function App() {
     { id: 'settings', label: 'Settings', icon: SettingsIcon },
   ];
 
-  if (loading) {
+  if (tenantLoading || loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-zinc-950 text-white">
         <div className="animate-pulse flex flex-col items-center">
-          <div className="w-16 h-16 bg-purple-600 rounded-full mb-4"></div>
-          <p className="text-xl font-medium">{tenant.businessName}...</p>
+          <div className="w-16 h-16 bg-gradient-to-tr from-[#0e071f] to-[#1e0e3f] border border-primary/40 rounded-full mb-4 flex items-center justify-center shadow-[0_0_15px_rgba(192,132,252,0.25)]">
+            <Sparkles className="text-primary w-6 h-6 animate-pulse" />
+          </div>
+          <p className="text-xl font-medium font-serif">{resolvedTenant.businessName}...</p>
         </div>
+      </div>
+    );
+  }
+
+  if (isNotFound) {
+    return (
+      <div className="flex-1 min-h-screen bg-zinc-950 text-white flex flex-col justify-center items-center p-6 text-center font-sans">
+        <div className="max-w-md w-full space-y-6">
+          <div className="relative w-24 h-24 mx-auto rounded-full bg-gradient-to-tr from-[#1b0c3f] to-[#0e071f] border border-red-500/30 flex items-center justify-center shadow-[0_0_30px_rgba(239,68,68,0.15)]">
+            <X className="text-red-400 w-10 h-10 animate-[pulse_2s_infinite]" />
+            <div className="absolute -inset-1 rounded-full border border-dashed border-red-500/10 pointer-events-none animate-[spin_60s_linear_infinite]" />
+          </div>
+
+          <div className="space-y-2">
+            <h1 className="text-4xl font-normal font-serif tracking-tight text-white sm:text-5xl">
+              Studio Space <span className="italic text-primary">Not Found</span>
+            </h1>
+            <p className="text-xs font-semibold tracking-wider uppercase text-red-400">
+              404 — INVALID BUSINESS LINK
+            </p>
+          </div>
+
+          <p className="text-zinc-400 text-sm leading-relaxed">
+            The studio booking workspace you are looking for does not exist or has been deactivated. Double check the address handle or build your own spectacular booking portal.
+          </p>
+
+          <div className="pt-4 flex flex-col sm:flex-row gap-3 justify-center">
+            <Button
+              onClick={() => {
+                window.location.href = window.location.origin;
+              }}
+              className="bg-primary hover:bg-primary/90 text-primary-foreground font-black text-xs uppercase tracking-wider rounded-full h-12 px-6 shadow-md transition-all active:scale-95 duration-200"
+            >
+              Default Studio Home
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsSignupOpen(true);
+              }}
+              className="border-white/10 hover:bg-white/5 text-white font-bold text-xs uppercase tracking-wider rounded-full h-12 px-6 transition-all"
+            >
+              Register Your Business
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (isSignupOpen) {
+    return (
+      <div className="min-h-screen bg-background text-foreground flex flex-col font-sans">
+        <header className="border-b border-border/40 bg-background/80 backdrop-blur-xl h-16 flex items-center justify-between px-6">
+          <div className="flex items-center gap-3">
+            <div className="relative w-10 h-10 rounded-full bg-gradient-to-tr from-[#0e071f] to-[#1e0e3f] border border-primary/40 flex items-center justify-center shadow-[0_0_15px_rgba(192,132,252,0.25)]">
+              <Sparkles className="text-primary w-4.5 h-4.5 animate-pulse" />
+            </div>
+            <h1 className="text-xl font-normal font-serif text-foreground">Qflow Salon Platform</h1>
+          </div>
+          <Button variant="ghost" onClick={() => {
+            setIsSignupOpen(false);
+            window.location.hash = '';
+          }} className="rounded-full">Go back to Booking</Button>
+        </header>
+        <main className="flex-1 flex items-center justify-center p-4">
+          <TenantSignup 
+            onBack={() => {
+              setIsSignupOpen(false);
+              window.location.hash = '';
+            }}
+            onSignupSuccess={(registeredSlug) => {
+              setIsSignupOpen(false);
+              window.location.hash = '';
+              window.location.href = `${window.location.origin}${window.location.pathname}?tenant=${registeredSlug}`;
+            }}
+          />
+        </main>
+      </div>
+    );
+  }
+
+  if (isSuperadminPageOpen && user && isSuperadmin) {
+    return (
+      <div className="min-h-screen bg-zinc-950 text-white font-sans flex flex-col">
+        <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-zinc-900/80 backdrop-blur-xl supports-[backdrop-filter]:bg-zinc-950/50">
+          <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="relative w-10 h-10 rounded-full bg-gradient-to-tr from-[#0e071f] to-[#1e0e3f] border border-primary/40 flex items-center justify-center shadow-[0_0_15px_rgba(192,132,252,0.25)]">
+                <Sparkles className="text-primary w-4.5 h-4.5 animate-pulse" />
+              </div>
+              <h1 className="text-xl font-normal font-serif text-white tracking-tight flex items-center gap-2">
+                Qflow <span className="text-[10px] bg-primary/20 text-primary border border-primary/30 px-2.5 py-0.5 rounded-full font-mono font-black uppercase tracking-widest leading-none">Super Control</span>
+              </h1>
+            </div>
+            
+            <div className="flex items-center gap-4">
+              <div className="text-right hidden sm:block">
+                <p className="text-sm font-semibold text-white">{user.displayName}</p>
+                <p className="text-xs text-zinc-400 font-mono">Platform Coordinator</p>
+              </div>
+              <Button variant="ghost" size="icon" onClick={handleLogout} className="text-zinc-400 hover:text-white rounded-full">
+                <LogOut className="w-5 h-5" />
+              </Button>
+            </div>
+          </div>
+        </header>
+        
+        <main className="flex-1 p-4 sm:p-8 lg:p-12 bg-zinc-950">
+          <div className="max-w-7xl mx-auto">
+            <SuperAdminDashboard onNavigate={() => {
+              setIsSuperadminPageOpen(false);
+              window.history.pushState(null, '', '/');
+              window.dispatchEvent(new Event('popstate'));
+            }} />
+          </div>
+        </main>
+        <Toaster position="top-center" theme="dark" />
       </div>
     );
   }
@@ -205,7 +395,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-background text-foreground font-sans selection:bg-primary/30 flex flex-col">
       {/* Top Winter Promo Banner */}
-      {!isAdmin && (
+      {!isAdmin && tenantId !== 'qflow-default' && (
         <div className="w-full bg-[#3b1c6e] hover:bg-[#43207c] transition-colors text-center py-2.5 px-4 text-[10px] sm:text-xs font-semibold tracking-wider text-white flex items-center justify-center gap-1.5 border-b border-violet-900/30">
           <Sparkles className="w-3.5 h-3.5 text-primary-foreground animate-pulse" />
           <span>Winter Glam, unveiled — 10% off all acrylics this season.</span>
@@ -231,12 +421,12 @@ export default function App() {
               <div className="absolute inset-x-0 bottom-0 top-0 bg-gradient-to-t from-primary/5 to-transparent pointer-events-none" />
             </div>
             <h1 className="text-xl font-normal tracking-tight text-foreground sm:text-2xl font-serif">
-              {tenant.businessName}
+              {resolvedTenant.businessName}
             </h1>
           </div>
 
           <div className="flex items-center gap-2">
-            {!isAdmin && (
+            {!isAdmin && tenantId !== 'qflow-default' && (
               <Button 
                 variant="ghost" 
                 className="hidden sm:flex text-muted-foreground hover:text-primary font-bold"
@@ -247,18 +437,43 @@ export default function App() {
             )}
             {user ? (
               <div className="flex items-center gap-2 sm:gap-4">
+                {isSuperadmin && (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setIsSuperadminPageOpen(true);
+                      window.history.pushState(null, '', '/superadmin');
+                      window.dispatchEvent(new Event('popstate'));
+                    }}
+                    className="rounded-full border-primary/40 h-8 text-[10px] uppercase font-black tracking-wider text-primary hover:bg-primary/10 px-3 flex items-center gap-1 shadow-[0_0_15px_rgba(192,132,252,0.15)]"
+                  >
+                    <Activity className="w-3.5 h-3.5 animate-[pulse_1.5s_infinite]" />
+                    Control Desk
+                  </Button>
+                )}
                 <div className="hidden sm:block text-right">
                   <p className="text-sm font-semibold text-foreground">{user.displayName}</p>
-                  <p className="text-xs text-muted-foreground">{isAdmin ? 'Administrator' : 'Client'}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {isSuperadmin ? 'Super Admin' : isAdmin ? 'Administrator' : 'Client'}
+                  </p>
                 </div>
                 <Button variant="ghost" size="icon" onClick={handleLogout} className="text-muted-foreground hover:text-foreground hover:bg-accent rounded-full">
                   <LogOut className="w-5 h-5" />
                 </Button>
               </div>
             ) : (
-              <Button onClick={() => setIsAuthPageOpen(true)} className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-md transition-all active:scale-95 text-xs font-bold uppercase tracking-wider rounded-full h-10 px-5">
-                Login / Register
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setIsSignupOpen(true)} 
+                  className="hidden sm:inline-flex rounded-full border-primary/30 text-primary hover:bg-primary/5 text-xs font-bold"
+                >
+                  Register Business
+                </Button>
+                <Button onClick={() => setIsAuthPageOpen(true)} className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-md transition-all active:scale-95 text-xs font-bold uppercase tracking-wider rounded-full h-10 px-5">
+                  Login / Register
+                </Button>
+              </div>
             )}
           </div>
         </div>
@@ -366,7 +581,7 @@ export default function App() {
           </>
         )}
 
-        <main className={`flex-1 overflow-y-auto p-4 sm:p-8 lg:p-12 ${!isAdmin ? 'container mx-auto' : ''}`}>
+        <main className={`flex-1 overflow-y-auto ${(!isAdmin && tenantId !== 'qflow-default') ? 'container mx-auto p-4 sm:p-8 lg:p-12' : (isAdmin ? 'p-4 sm:p-8 lg:p-12' : '')}`}>
           {isAdmin ? (
             <div className="max-w-7xl mx-auto">
               <AnimatePresence mode="wait">
@@ -383,6 +598,11 @@ export default function App() {
             </div>
           ) : isAuthPageOpen ? (
             <AuthScreen onBack={() => setIsAuthPageOpen(false)} />
+          ) : tenantId === 'qflow-default' ? (
+            <B2BLandingPage 
+              onStartSignUp={() => setIsSignupOpen(true)}
+              onLoginClick={() => setIsAuthPageOpen(true)}
+            />
           ) : user ? (
             <ClientPortal 
               user={user} 
@@ -398,24 +618,24 @@ export default function App() {
                 {/* Sparkle Badge */}
                 <div className="inline-flex items-center gap-1.5 px-4 h-8 bg-violet-950/40 border border-violet-800/40 rounded-full shadow-[0_2px_10px_rgba(0,0,0,0.1)]">
                   <span className="text-[10px] tracking-[0.18em] font-extrabold uppercase text-[#c084fc] flex items-center gap-1.5">
-                    {tenant.starEndorsement}
+                    {resolvedTenant.starEndorsement}
                   </span>
                 </div>
 
                 {/* Main Heading */}
                 <h2 className="text-4xl sm:text-6xl font-normal leading-tight text-foreground tracking-tight max-w-3xl mx-auto font-serif">
-                  Where every set feels like <span className="italic text-primary font-medium block sm:inline">a little spell.</span>
+                  Where every set feels like <span className="italic text-primary font-medium block sm:inline">a little magic.</span>
                 </h2>
 
                 {/* Subheading text */}
                 <p className="text-muted-foreground text-sm sm:text-base md:text-lg max-w-2xl mx-auto leading-relaxed">
-                  {tenant.description}
+                  {resolvedTenant.description}
                 </p>
 
                 {/* CTAs */}
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
                   <a 
-                    href={`https://wa.me/27692981893?text=Hi!%20I%20saw%20your%20design%20portal%20and%20I'd%20like%20to%20book%20a%20magical%20session%20on%20${tenant.businessName}.`} 
+                    href={`https://wa.me/${resolvedTenant.whatsappPhone || '27692981893'}?text=Hi!%20I%20saw%20your%20design%20portal%20and%20I'd%20like%20to%20book%20a%20magical%20session%20on%20${resolvedTenant.businessName}.`} 
                     target="_blank" 
                     rel="noopener noreferrer" 
                     className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-[#1ade6e] hover:bg-[#16c461] text-[#05020c] font-black text-sm rounded-full px-8 py-4 shadow-xl shadow-green-500/10 transition-all hover:scale-[1.02] active:scale-95"
@@ -442,7 +662,7 @@ export default function App() {
                     <Star className="w-3.5 h-3.5 fill-current" />
                   </div>
                   <span className="opacity-30">|</span>
-                  <a href={`tel:${tenant.phone}`} className="hover:text-primary transition-colors font-mono tracking-wider">{tenant.phone}</a>
+                  <a href={`tel:${resolvedTenant.phone}`} className="hover:text-primary transition-colors font-mono tracking-wider">{resolvedTenant.phone}</a>
                 </div>
               </div>
 
@@ -452,7 +672,7 @@ export default function App() {
                 <div className="space-y-2">
                   <span className="text-[10px] sm:text-xs font-bold text-primary uppercase tracking-[0.2em] block font-mono">MEET THE ARTIST</span>
                   <h3 className="text-3xl sm:text-4xl font-normal font-serif text-foreground">
-                    Hi, I'm <span className="italic text-primary">{tenant.artistName}.</span>
+                    Hi, I'm <span className="italic text-primary">{resolvedTenant.artistName}.</span>
                   </h3>
                 </div>
                 <p className="text-muted-foreground text-sm sm:text-base leading-relaxed max-w-2xl font-medium">
@@ -474,7 +694,7 @@ export default function App() {
                   <Sparkles className="w-6 h-6 text-primary mb-1.5 animate-[pulse_3s_infinite]" />
                   <span className="text-[9px] tracking-[0.2em] font-black text-primary/50 uppercase">THE PORTFOLIO</span>
                   <h4 className="text-base sm:text-lg font-normal font-serif text-foreground mt-0.5 leading-tight">
-                    {tenant.businessName}
+                    {resolvedTenant.businessName}
                   </h4>
                   <div className="absolute inset-2 rounded-full border border-dashed border-primary/10 pointer-events-none animate-[spin_100s_linear_infinite]" />
                 </div>
@@ -499,14 +719,14 @@ export default function App() {
         </main>
       </div>
 
-      {!isAdmin && (
+      {!isAdmin && tenantId !== 'qflow-default' && (
         <footer className="border-t border-border py-8 sm:py-12 mt-12 sm:mt-20">
           <div className="container mx-auto px-4 text-center space-y-4">
-            <p className="text-muted-foreground text-sm font-medium">© 2026 {tenant.businessName}. All rights reserved.</p>
+            <p className="text-muted-foreground text-sm font-medium">© 2026 {resolvedTenant.businessName}. All rights reserved.</p>
             <div className="flex flex-col sm:flex-row justify-center gap-2 sm:gap-6 text-muted-foreground text-xs font-semibold uppercase tracking-widest">
-              <span>{tenant.phone}</span>
+              <span>{resolvedTenant.phone}</span>
               <span className="hidden sm:inline">•</span>
-              <span>{tenant.address}</span>
+              <span>{resolvedTenant.address}</span>
             </div>
           </div>
         </footer>

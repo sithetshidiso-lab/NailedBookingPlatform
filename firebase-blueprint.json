@@ -1,5 +1,22 @@
 {
   "entities": {
+    "Tenant": {
+      "title": "Tenant",
+      "description": "Multi-tenant salon business profile in Qflow",
+      "type": "object",
+      "properties": {
+        "businessName": { "type": "string" },
+        "ownerEmail": { "type": "string" },
+        "ownerUid": { "type": "string", "description": "Authenticated UID of the business owner" },
+        "slug": { "type": "string", "description": "Unique URL-friendly slug" },
+        "logoUrl": { "type": "string" },
+        "templateId": { "type": "string" },
+        "plan": { "type": "string", "enum": ["free", "pro"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["businessName", "ownerEmail", "ownerUid", "slug", "plan", "isActive"]
+    },
     "Service": {
       "title": "Service",
       "description": "A nail or beauty service offered by the business",
@@ -108,33 +125,45 @@
     }
   },
   "firestore": {
-    "/services/{serviceId}": {
+    "/tenants/{tenantId}": {
+      "schema": "Tenant",
+      "description": "Information about a specific salon tenant"
+    },
+    "/tenants/{tenantId}/services/{serviceId}": {
       "schema": "Service",
-      "description": "Collection of available services"
+      "description": "Collection of available services for a tenant"
     },
-    "/bookings/{bookingId}": {
+    "/tenants/{tenantId}/bookings/{bookingId}": {
       "schema": "Booking",
-      "description": "Collection of appointments"
+      "description": "Collection of appointments for a tenant"
     },
-    "/clients/{clientId}": {
+    "/tenants/{tenantId}/clients/{clientId}": {
       "schema": "Client",
-      "description": "Collection of client records"
+      "description": "Collection of client records for a tenant"
     },
-    "/expenses/{expenseId}": {
+    "/tenants/{tenantId}/expenses/{expenseId}": {
       "schema": "Expense",
-      "description": "Collection of business expenses"
+      "description": "Collection of business expenses for a tenant"
     },
-    "/gallery/{imageId}": {
+    "/tenants/{tenantId}/gallery/{imageId}": {
       "schema": "GalleryImage",
-      "description": "Collection of gallery images"
+      "description": "Collection of gallery images for a tenant"
     },
-    "/promotions/{promoId}": {
+    "/tenants/{tenantId}/promotions/{promoId}": {
       "schema": "Promotion",
-      "description": "Collection of studio promotions shown to clients"
+      "description": "Collection of studio promotions shown to clients of a tenant"
     },
-    "/settings/app": {
+    "/tenants/{tenantId}/settings/{settingId}": {
       "schema": "AppSettings",
-      "description": "Global application settings"
+      "description": "Tenant specific application settings"
+    },
+    "/tenants/{tenantId}/availability/{slotId}": {
+      "schema": "object",
+      "description": "Tenant specific slot availability"
+    },
+    "/tenants/{tenantId}/users/{userId}": {
+      "schema": "object",
+      "description": "Tenant specific user profiles and roles mapping matching active personnel"
     },
     "/superadmin/{email}": {
       "schema": "SuperAdmin",

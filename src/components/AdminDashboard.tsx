@@ -19,7 +19,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import imageCompression from 'browser-image-compression';
-import { tenant } from '../tenant';
+import { tenant, getTenantCollectionPath } from '../tenant';
+import { useTenant } from '../context/TenantContext';
 
 interface AdminDashboardProps {
   services: Service[];
@@ -90,6 +91,17 @@ function GalleryItemCard({ img, onRemove, onUpdate }: GalleryItemCardProps) {
 }
 
 export function AdminDashboard({ services, initialTab = 'overview', onNavigate }: AdminDashboardProps) {
+  const { tenantId, tenantData } = useTenant();
+  const resolvedTenant = tenantData || {
+    ...tenant,
+    ownerEmail: "sithetshidiso@gmail.com",
+    slug: tenantId,
+    templateId: "default",
+    plan: "pro" as const,
+    createdAt: "",
+    isActive: true
+  };
+
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
@@ -179,61 +191,61 @@ export function AdminDashboard({ services, initialTab = 'overview', onNavigate }
   );
 
   useEffect(() => {
-    const q = query(collection(db, 'bookings'), orderBy('createdAt', 'desc'), limit(100));
+    const q = query(collection(db, getTenantCollectionPath('bookings')), orderBy('createdAt', 'desc'), limit(100));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const bookingsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Booking));
       setBookings(bookingsData);
       setLoading(false);
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'bookings');
+      handleFirestoreError(error, OperationType.LIST, getTenantCollectionPath('bookings'));
     });
 
     return () => unsubscribe();
   }, []);
 
   useEffect(() => {
-    const q = query(collection(db, 'gallery'), orderBy('createdAt', 'desc'));
+    const q = query(collection(db, getTenantCollectionPath('gallery')), orderBy('createdAt', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const galleryData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as GalleryImage));
       setGallery(galleryData);
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'gallery');
+      handleFirestoreError(error, OperationType.LIST, getTenantCollectionPath('gallery'));
     });
 
     return () => unsubscribe();
   }, []);
 
   useEffect(() => {
-    const q = query(collection(db, 'expenses'), orderBy('date', 'desc'));
+    const q = query(collection(db, getTenantCollectionPath('expenses')), orderBy('date', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const expensesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Expense));
       setExpenses(expensesData);
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'expenses');
+      handleFirestoreError(error, OperationType.LIST, getTenantCollectionPath('expenses'));
     });
 
     return () => unsubscribe();
   }, []);
 
   useEffect(() => {
-    const q = query(collection(db, 'clients'), orderBy('lastBooking', 'desc'));
+    const q = query(collection(db, getTenantCollectionPath('clients')), orderBy('lastBooking', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const clientsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Client));
       setClients(clientsData);
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'clients');
+      handleFirestoreError(error, OperationType.LIST, getTenantCollectionPath('clients'));
     });
 
     return () => unsubscribe();
   }, []);
 
   useEffect(() => {
-    const q = query(collection(db, 'promotions'), orderBy('createdAt', 'desc'));
+    const q = query(collection(db, getTenantCollectionPath('promotions')), orderBy('createdAt', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const promosData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Promotion));
       setPromotions(promosData);
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'promotions');
+      handleFirestoreError(error, OperationType.LIST, getTenantCollectionPath('promotions'));
     });
 
     return () => unsubscribe();
@@ -247,7 +259,7 @@ export function AdminDashboard({ services, initialTab = 'overview', onNavigate }
     }
     setIsPromoSaving(true);
     try {
-      await addDoc(collection(db, 'promotions'), {
+      await addDoc(collection(db, getTenantCollectionPath('promotions')), {
         ...newPromo,
         createdAt: new Date().toISOString()
       });
@@ -263,7 +275,7 @@ export function AdminDashboard({ services, initialTab = 'overview', onNavigate }
 
   const handleTogglePromo = async (promoId: string, currentActive: boolean) => {
     try {
-      await updateDoc(doc(db, 'promotions', promoId), {
+      await updateDoc(doc(db, getTenantCollectionPath('promotions'), promoId), {
         active: !currentActive
       });
       toast.success('Promotion toggled successfully');
@@ -275,7 +287,7 @@ export function AdminDashboard({ services, initialTab = 'overview', onNavigate }
 
   const handleDeletePromo = async (promoId: string) => {
     try {
-      await deleteDoc(doc(db, 'promotions', promoId));
+      await deleteDoc(doc(db, getTenantCollectionPath('promotions'), promoId));
       toast.success('Promotion deleted successfully');
     } catch (error) {
       console.error(error);
@@ -284,19 +296,19 @@ export function AdminDashboard({ services, initialTab = 'overview', onNavigate }
   };
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(doc(db, 'settings', 'app'), (doc) => {
+    const unsubscribe = onSnapshot(doc(db, getTenantCollectionPath('settings'), 'app'), (doc) => {
       if (doc.exists()) {
         setSettings(doc.data() as AppSettings);
       }
     }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'settings/app');
+      handleFirestoreError(error, OperationType.GET, getTenantCollectionPath('settings') + '/app');
     });
     return () => unsubscribe();
   }, []);
 
   const updateBookingStatus = async (bookingId: string, status: Booking['status']) => {
     try {
-      await updateDoc(doc(db, 'bookings', bookingId), { status });
+      await updateDoc(doc(db, getTenantCollectionPath('bookings'), bookingId), { status });
       
       const booking = bookings.find(b => b.id === bookingId);
       if (booking) {
@@ -309,12 +321,12 @@ export function AdminDashboard({ services, initialTab = 'overview', onNavigate }
           if (pointsToEarn > 0) {
             const matchingClient = clients.find(c => c.email === booking.clientEmail);
             if (matchingClient && matchingClient.id) {
-              await updateDoc(doc(db, 'clients', matchingClient.id), {
+              await updateDoc(doc(db, getTenantCollectionPath('clients'), matchingClient.id), {
                 loyaltyPoints: (matchingClient.loyaltyPoints || 0) + pointsToEarn
               });
             } else {
               // Create new client in Firestore if they don't exist
-              await addDoc(collection(db, 'clients'), {
+              await addDoc(collection(db, getTenantCollectionPath('clients')), {
                 name: booking.clientName,
                 email: booking.clientEmail,
                 phone: booking.clientPhone || '',
@@ -324,7 +336,7 @@ export function AdminDashboard({ services, initialTab = 'overview', onNavigate }
                 notes: 'Automatically created from completed appointment'
               });
             }
-            await updateDoc(doc(db, 'bookings', bookingId), {
+            await updateDoc(doc(db, getTenantCollectionPath('bookings'), bookingId), {
               pointsAwarded: true,
               pointsEarned: pointsToEarn
             });
@@ -533,13 +545,13 @@ export function AdminDashboard({ services, initialTab = 'overview', onNavigate }
       });
 
       // Check which clients already exist in the collection
-      const existingClientsSnapshot = await getDocs(collection(db, 'clients'));
+      const existingClientsSnapshot = await getDocs(collection(db, getTenantCollectionPath('clients')));
       const existingEmails = new Set(existingClientsSnapshot.docs.map(doc => doc.data().email));
 
       let count = 0;
       clientsMap.forEach((client, email) => {
         if (!existingEmails.has(email)) {
-          const newDocRef = doc(collection(db, 'clients'));
+          const newDocRef = doc(collection(db, getTenantCollectionPath('clients')));
           batch.set(newDocRef, client);
           count++;
         }
@@ -579,14 +591,14 @@ export function AdminDashboard({ services, initialTab = 'overview', onNavigate }
         status: 'confirmed'
       };
 
-      const bookingDoc = await addDoc(collection(db, 'bookings'), bookingData);
+      const bookingDoc = await addDoc(collection(db, getTenantCollectionPath('bookings')), bookingData);
 
       // Deduct loyalty points and adjust balance
       if (newBooking.pointsRedeemed && newBooking.pointsRedeemed > 0) {
         const matchingClient = clients.find(c => c.email === newBooking.clientEmail);
         if (matchingClient && matchingClient.id) {
           const nextPoints = Math.max(0, (matchingClient.loyaltyPoints || 0) - newBooking.pointsRedeemed);
-          await updateDoc(doc(db, 'clients', matchingClient.id), {
+          await updateDoc(doc(db, getTenantCollectionPath('clients'), matchingClient.id), {
             loyaltyPoints: nextPoints
           });
         }
@@ -609,7 +621,7 @@ export function AdminDashboard({ services, initialTab = 'overview', onNavigate }
           createdAt: new Date().toISOString() 
         } as any as Booking);
         if (emailResult.success) {
-          await updateDoc(doc(db, 'bookings', bookingDoc.id), {
+          await updateDoc(doc(db, getTenantCollectionPath('bookings'), bookingDoc.id), {
             confirmationEmailSent: true,
             confirmationId: emailResult.confirmationId
           });
@@ -621,7 +633,7 @@ export function AdminDashboard({ services, initialTab = 'overview', onNavigate }
       if (isNewClientForAdmin) {
         const clientExists = clients.some(c => c.email === newBooking.clientEmail);
         if (!clientExists) {
-          await addDoc(collection(db, 'clients'), {
+          await addDoc(collection(db, getTenantCollectionPath('clients')), {
             name: newBooking.clientName,
             email: newBooking.clientEmail,
             phone: newBooking.clientPhone || '',
@@ -749,26 +761,26 @@ export function AdminDashboard({ services, initialTab = 'overview', onNavigate }
     try {
       if (editingService.id) {
         const { id, ...data } = editingService;
-        await updateDoc(doc(db, 'services', id), data);
+        await updateDoc(doc(db, getTenantCollectionPath('services'), id), data);
         toast.success('Service updated successfully');
       } else {
-        await addDoc(collection(db, 'services'), editingService);
+        await addDoc(collection(db, getTenantCollectionPath('services')), editingService);
         toast.success('Service added successfully');
       }
       setEditingService(null);
       setIsAddingService(false);
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'services');
+      handleFirestoreError(error, OperationType.WRITE, getTenantCollectionPath('services'));
     }
   };
 
   const deleteService = async (id: string) => {
     if (!confirm('Are you sure you want to delete this service?')) return;
     try {
-      await deleteDoc(doc(db, 'services', id));
+      await deleteDoc(doc(db, getTenantCollectionPath('services'), id));
       toast.success('Service deleted');
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `services/${id}`);
+      handleFirestoreError(error, OperationType.DELETE, getTenantCollectionPath('services') + `/${id}`);
     }
   };
 
@@ -780,26 +792,26 @@ export function AdminDashboard({ services, initialTab = 'overview', onNavigate }
     try {
       if (editingExpense.id) {
         const { id, ...data } = editingExpense;
-        await updateDoc(doc(db, 'expenses', id), data);
+        await updateDoc(doc(db, getTenantCollectionPath('expenses'), id), data);
         toast.success('Expense updated successfully');
       } else {
-        await addDoc(collection(db, 'expenses'), editingExpense);
+        await addDoc(collection(db, getTenantCollectionPath('expenses')), editingExpense);
         toast.success('Expense added successfully');
       }
       setEditingExpense(null);
       setIsAddingExpense(false);
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'expenses');
+      handleFirestoreError(error, OperationType.WRITE, getTenantCollectionPath('expenses'));
     }
   };
 
   const deleteExpense = async (id: string) => {
     if (!confirm('Are you sure you want to delete this expense?')) return;
     try {
-      await deleteDoc(doc(db, 'expenses', id));
+      await deleteDoc(doc(db, getTenantCollectionPath('expenses'), id));
       toast.success('Expense deleted');
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `expenses/${id}`);
+      handleFirestoreError(error, OperationType.DELETE, getTenantCollectionPath('expenses') + `/${id}`);
     }
   };
 
@@ -811,10 +823,10 @@ export function AdminDashboard({ services, initialTab = 'overview', onNavigate }
     try {
       if (editingClient.id) {
         const { id, ...data } = editingClient;
-        await updateDoc(doc(db, 'clients', id), data);
+        await updateDoc(doc(db, getTenantCollectionPath('clients'), id), data);
         toast.success('Client updated successfully');
       } else {
-        await addDoc(collection(db, 'clients'), {
+        await addDoc(collection(db, getTenantCollectionPath('clients')), {
           ...editingClient,
           lastBooking: '',
           totalBookings: 0
@@ -824,17 +836,17 @@ export function AdminDashboard({ services, initialTab = 'overview', onNavigate }
       setEditingClient(null);
       setIsAddingClient(false);
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'clients');
+      handleFirestoreError(error, OperationType.WRITE, getTenantCollectionPath('clients'));
     }
   };
 
   const deleteClient = async (id: string) => {
     if (!confirm('Are you sure you want to delete this client?')) return;
     try {
-      await deleteDoc(doc(db, 'clients', id));
+      await deleteDoc(doc(db, getTenantCollectionPath('clients'), id));
       toast.success('Client deleted');
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `clients/${id}`);
+      handleFirestoreError(error, OperationType.DELETE, getTenantCollectionPath('clients') + `/${id}`);
     }
   };
 
@@ -843,37 +855,37 @@ export function AdminDashboard({ services, initialTab = 'overview', onNavigate }
     try {
       // Don't save galleryImages in the settings doc anymore to avoid size limits
       const { galleryImages, ...otherSettings } = settings;
-      await setDoc(doc(db, 'settings', 'app'), otherSettings);
+      await setDoc(doc(db, getTenantCollectionPath('settings'), 'app'), otherSettings);
       toast.success('Settings saved successfully');
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'settings/app');
+      handleFirestoreError(error, OperationType.WRITE, getTenantCollectionPath('settings') + '/app');
     }
   };
 
   const addGalleryImage = async (base64: string) => {
     try {
-      await addDoc(collection(db, 'gallery'), {
+      await addDoc(collection(db, getTenantCollectionPath('gallery')), {
         url: base64,
         createdAt: serverTimestamp()
       });
       toast.success('Gallery image added');
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'gallery');
+      handleFirestoreError(error, OperationType.CREATE, getTenantCollectionPath('gallery'));
     }
   };
 
   const removeGalleryImage = async (id: string) => {
     try {
-      await deleteDoc(doc(db, 'gallery', id));
+      await deleteDoc(doc(db, getTenantCollectionPath('gallery'), id));
       toast.success('Gallery image removed');
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `gallery/${id}`);
+      handleFirestoreError(error, OperationType.DELETE, getTenantCollectionPath('gallery') + `/${id}`);
     }
   };
 
   const updateGalleryImageDetails = async (id: string, name: string, price: number) => {
     try {
-      await updateDoc(doc(db, 'gallery', id), {
+      await updateDoc(doc(db, getTenantCollectionPath('gallery'), id), {
         name,
         priceByNum: isNaN(price) ? 0 : price,
         price: isNaN(price) ? 0 : price,
@@ -881,7 +893,7 @@ export function AdminDashboard({ services, initialTab = 'overview', onNavigate }
       });
       toast.success('Gallery image updated');
     } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `gallery/${id}`);
+      handleFirestoreError(error, OperationType.UPDATE, getTenantCollectionPath('gallery') + `/${id}`);
     }
   };
 
@@ -1574,7 +1586,7 @@ export function AdminDashboard({ services, initialTab = 'overview', onNavigate }
     <div className="space-y-6 sm:space-y-8">
         <div>
           <h2 className="text-3xl font-black text-foreground tracking-tight">Welcome back!</h2>
-          <p className="text-muted-foreground font-medium">Here's what's happening with {tenant.businessName} today.</p>
+          <p className="text-muted-foreground font-medium">Here's what's happening with {resolvedTenant.businessName} today.</p>
         </div>
         <div className="flex items-center gap-2 text-sm font-bold text-muted-foreground bg-muted/50 px-4 py-2 rounded-2xl border border-border">
           <CalendarIcon className="w-4 h-4 text-primary" />

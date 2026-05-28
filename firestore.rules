@@ -1,70 +1,37 @@
 rules_version = '2';
-
+ 
 service cloud.firestore {
   match /databases/{database}/documents {
     // ===============================================================
-    // Assumed Data Model
+    // Assumed Multi-Tenant Data Model
     // ===============================================================
     //
-    // Collection: users
-    // Document ID: auth.uid
-    // Fields:
-    //   - email: string (required)
-    //   - role: string (required, enum: admin, client)
-    //   - name: string (optional)
+    // Root Collection: superadmin
+    // Document ID: email (e.g. sithetshidiso@gmail.com)
     //
-    // Collection: services
-    // Document ID: auto-generated
+    // Root Collection: tenants
+    // Document ID: tenantId (e.g. qflow-default)
     // Fields:
-    //   - name: string (required)
-    //   - category: string (required)
-    //   - price: number (required)
-    //   - duration: number (optional)
-    //   - image: string (optional, base64)
-    //   - description: string (optional)
+    //   - businessName: string (required)
+    //   - ownerEmail: string (required)
+    //   - slug: string (required)
+    //   - logoUrl: string (optional)
+    //   - templateId: string (optional)
+    //   - plan: string (required, free or pro)
+    //   - createdAt: string (required)
+    //   - isActive: boolean (required)
     //
-    // Collection: bookings
-    // Document ID: auto-generated
-    // Fields:
-    //   - serviceId: string (optional)
-    //   - serviceNames: list (required)
-    //   - clientName: string (required)
-    //   - clientEmail: string (required)
-    //   - clientPhone: string (optional)
-    //   - date: string (required, YYYY-MM-DD)
-    //   - time: string (required, HH:MM)
-    //   - status: string (required, enum: pending, confirmed, completed, cancelled)
-    //   - totalPrice: number (required)
-    //   - notes: string (optional)
-    //   - createdAt: timestamp (optional)
-    //
-    // Collection: clients
-    // Document ID: auto-generated
-    // Fields:
-    //   - name: string (required)
-    //   - email: string (required)
-    //   - phone: string (optional)
-    //   - notes: string (optional)
-    //   - lastBooking: string (optional, YYYY-MM-DD)
-    //   - totalBookings: number (optional)
-    //
-    // Collection: expenses
-    // Document ID: auto-generated
-    // Fields:
-    //   - title: string (required)
-    //   - amount: number (required)
-    //   - category: string (required)
-    //   - date: string (required, YYYY-MM-DD)
-    //   - description: string (optional)
-    //
-    // Collection: settings
-    // Document ID: app
-    // Fields:
-    //   - bookingPolicy: string (optional)
-    //   - galleryImages: list (optional)
+    // Collection: tenants/{tenantId}/services
+    // Collection: tenants/{tenantId}/bookings
+    // Collection: tenants/{tenantId}/clients
+    // Collection: tenants/{tenantId}/expenses
+    // Collection: tenants/{tenantId}/gallery
+    // Collection: tenants/{tenantId}/promotions
+    // Collection: tenants/{tenantId}/settings
+    // Collection: tenants/{tenantId}/availability
     //
     // ===============================================================
-
+ 
     // ===============================================================
     // Helper Functions
     // ===============================================================
@@ -72,50 +39,52 @@ service cloud.firestore {
     function isAuthenticated() {
       return request.auth != null;
     }
-
+ 
     function isSuperadmin() {
       return isAuthenticated() &&
         (
-          exists(/databases/$(database)/documents/superadmin/$(request.auth.token.email)) ||
+          (request.auth.token.email != null && exists(/databases/$(database)/documents/superadmin/$(request.auth.token.email))) ||
           (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'superadmin')
         );
     }
-
-    function isAdmin() {
-      return isAuthenticated() &&
-        (
-          isSuperadmin() ||
-          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-           (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'superadmin'))
-        );
+ 
+    function isTenantAdmin(tenantId) {
+      return isAuthenticated() && (
+        isSuperadmin() ||
+        (exists(/databases/$(database)/documents/tenants/$(tenantId)) && 
+         (
+           (request.auth.token.email != null && get(/databases/$(database)/documents/tenants/$(tenantId)).data.ownerEmail == request.auth.token.email) ||
+           (get(/databases/$(database)/documents/tenants/$(tenantId)).data.ownerUid != null && get(/databases/$(database)/documents/tenants/$(tenantId)).data.ownerUid == request.auth.uid)
+         )
+        )
+      );
     }
-
+ 
     function isOwner(email) {
       return isAuthenticated() && request.auth.token.email == email;
     }
-
+ 
     function hasRequiredFields(fields) {
       return request.resource.data.keys().hasAll(fields);
     }
-
+ 
     function hasOnlyAllowedFields(fields) {
       return request.resource.data.keys().hasOnly(fields);
     }
-
+ 
     function isValidEmail(email) {
       return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
     }
-
+ 
     function isValidDateString(dateStr) {
       return dateStr is string && dateStr.matches("^\\d{4}-\\d{2}-\\d{2}$");
     }
-
+ 
     // ===============================================================
     // Domain Validators
     // ===============================================================
-
+ 
     function isValidBooking(data) {
       return data.clientName is string && data.clientName.size() > 0 && data.clientName.size() < 100 &&
              data.clientEmail is string && isValidEmail(data.clientEmail) &&
@@ -124,86 +93,108 @@ service cloud.firestore {
              data.totalPrice is number && data.totalPrice >= 0 &&
              (!('referenceNumber' in data) || data.referenceNumber is string);
     }
-
+ 
     function isValidClient(data) {
       return data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
              data.email is string && isValidEmail(data.email);
     }
-
+ 
     // ===============================================================
     // Global Superadmin Override Pattern
     // ===============================================================
     match /{document=**} {
       allow read, write: if isSuperadmin();
     }
-
+ 
     // ===============================================================
-    // Collection Rules
+    // Root Collection Rules
     // ===============================================================
-
+ 
     match /users/{userId} {
-      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
-      allow write: if isAdmin() || (isAuthenticated() && request.auth.uid == userId);
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isSuperadmin());
+      allow write: if isSuperadmin() || (isAuthenticated() && request.auth.uid == userId);
     }
-
-    match /services/{serviceId} {
-      // Allow anyone to see services, but only admins can manage them (including images)
-      allow read: if true;
-      allow write: if isAdmin();
+ 
+    match /superadmin/{email} {
+      allow read, write: if isSuperadmin();
     }
-
-    match /bookings/{bookingId} {
-      allow read: if isAdmin() || (isAuthenticated() && request.auth.token.email == resource.data.clientEmail);
-      // Allow guest booking creation
-      allow create: if isValidBooking(request.resource.data);
-      // Allow guests/clients to update proofOfPaymentSubmitted or email confirmation details
-      allow update: if isAdmin() || (
-        isAuthenticated() && request.auth.token.email == resource.data.clientEmail &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['proofOfPaymentSubmitted'])
-      ) || (
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['confirmationEmailSent', 'confirmationId'])
-      );
-      allow delete: if isAdmin();
-    }
-
-    match /promotions/{promoId} {
-      // Anyone can load active/inactive promotions, only admin can write
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-
-    match /availability/{slotId} {
-      allow read: if true;
-      // Allow guests to sync their own bookings if they follow valid schema
-      allow write: if true; 
-    }
-
-    match /clients/{clientId} {
-      allow read, write: if isAdmin();
-    }
-
-    match /expenses/{expenseId} {
-      allow read, write: if isAdmin();
-    }
-
-    match /settings/{settingId} {
-      // Allow anyone to see settings (like gallery), but only admins can update them
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-
-    match /gallery/{imageId} {
-      // Allow anyone to see gallery images, but only admins can manage them
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-
+ 
     match /test/connection {
       allow read: if true;
     }
-
-    match /superadmin/{email} {
-      allow read, write: if isSuperadmin();
+ 
+    // ===============================================================
+    // Multi-Tenant Hierarchy Rules
+    // ===============================================================
+ 
+    match /tenants/{tenantId} {
+      // Anyone can read tenant metadata (like business name, logo url, plan, dynamic styling)
+      allow read: if true;
+      // Only superadmins can create/delete tenants, or the tenant admin to update their own tenant
+      allow create: if isSuperadmin() || (isAuthenticated() && (
+        (request.auth.token.email != null && request.auth.token.email == request.resource.data.ownerEmail) ||
+        (request.resource.data.ownerUid != null && request.auth.uid == request.resource.data.ownerUid)
+      ));
+      allow update: if isTenantAdmin(tenantId);
+      allow delete: if isSuperadmin();
+ 
+      match /users/{userId} {
+        // Authenticated users can read/write their own details, or tenant admins can manage all tenant users
+        allow read, write: if isAuthenticated() && (request.auth.uid == userId || isTenantAdmin(tenantId));
+      }
+ 
+      match /services/{serviceId} {
+        // Allow anyone to see services for a tenant, but only tenant admins can manage them
+        allow read: if true;
+        allow write: if isTenantAdmin(tenantId);
+      }
+ 
+      match /bookings/{bookingId} {
+        // Tenant admins or the client who matches by email on the booking can read
+        allow read: if isTenantAdmin(tenantId) || (isAuthenticated() && request.auth.token.email == resource.data.clientEmail);
+        
+        // Anyone can create a booking
+        allow create: if isValidBooking(request.resource.data);
+        
+        // Allow guest / clients to upload proof of payment or updates confirmation
+        allow update: if isTenantAdmin(tenantId) || (
+          isAuthenticated() && request.auth.token.email == resource.data.clientEmail &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['proofOfPaymentSubmitted'])
+        ) || (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['confirmationEmailSent', 'confirmationId'])
+        );
+        
+        allow delete: if isTenantAdmin(tenantId);
+      }
+ 
+      match /promotions/{promoId} {
+        // Anyone can load active promotions
+        allow read: if true;
+        allow write: if isTenantAdmin(tenantId);
+      }
+ 
+      match /availability/{slotId} {
+        allow read: if true;
+        allow write: if true; 
+      }
+ 
+      match /clients/{clientId} {
+        allow read, write: if isTenantAdmin(tenantId);
+      }
+ 
+      match /expenses/{expenseId} {
+        allow read, write: if isTenantAdmin(tenantId);
+      }
+ 
+      match /settings/{settingId} {
+        allow read: if true;
+        allow write: if isTenantAdmin(tenantId);
+      }
+ 
+      match /gallery/{imageId} {
+        allow read: if true;
+        allow write: if isTenantAdmin(tenantId);
+      }
     }
   }
 }

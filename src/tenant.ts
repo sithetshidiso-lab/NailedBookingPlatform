@@ -23,3 +23,14 @@ export const tenant: Tenant = {
   starEndorsement: "✨ PROFESSIONAL SCHEDULER",
   whatsappPhone: "27692981893"
 };
+
+const urlParams = new URL(window.location.href).searchParams;
+export let currentTenantId = urlParams.get('tenant') || urlParams.get('tenantId') || 'qflow-default';
+
+export function setCurrentTenantId(newId: string) {
+  currentTenantId = newId;
+}
+
+export function getTenantCollectionPath(collectionName: string) {
+  return `tenants/${currentTenantId}/${collectionName}`;
+}

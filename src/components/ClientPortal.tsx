@@ -29,7 +29,8 @@ import {
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
 import { format, parseISO } from 'date-fns';
-import { tenant } from '../tenant';
+import { tenant, getTenantCollectionPath } from '../tenant';
+import { useTenant } from '../context/TenantContext';
 
 interface ClientPortalProps {
   user: FirebaseUser;
@@ -40,6 +41,17 @@ interface ClientPortalProps {
 }
 
 export function ClientPortal({ user, services, onLogout, isGalleryOpen, setIsGalleryOpen }: ClientPortalProps) {
+  const { tenantId, tenantData } = useTenant();
+  const resolvedTenant = tenantData || {
+    ...tenant,
+    ownerEmail: "sithetshidiso@gmail.com",
+    slug: tenantId,
+    templateId: "default",
+    plan: "pro" as const,
+    createdAt: "",
+    isActive: true
+  };
+
   const [activeSegment, setActiveSegment] = useState<'home' | 'book' | 'history'>('home');
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [myBookings, setMyBookings] = useState<Booking[]>([]);
@@ -53,7 +65,7 @@ export function ClientPortal({ user, services, onLogout, isGalleryOpen, setIsGal
   useEffect(() => {
     if (!user.email) return;
     const q = query(
-      collection(db, 'bookings'),
+      collection(db, getTenantCollectionPath('bookings')),
       where('clientEmail', '==', user.email)
     );
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -72,7 +84,7 @@ export function ClientPortal({ user, services, onLogout, isGalleryOpen, setIsGal
 
   // Load promotions
   useEffect(() => {
-    const q = query(collection(db, 'promotions'), where('active', '==', true));
+    const q = query(collection(db, getTenantCollectionPath('promotions')), where('active', '==', true));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const promoData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Promotion));
       setPromotions(promoData);
@@ -86,7 +98,7 @@ export function ClientPortal({ user, services, onLogout, isGalleryOpen, setIsGal
   // Fetch client record for additional stats
   useEffect(() => {
     if (!user.email) return;
-    const q = query(collection(db, 'clients'), where('email', '==', user.email));
+    const q = query(collection(db, getTenantCollectionPath('clients')), where('email', '==', user.email));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       if (!snapshot.empty) {
         setClientRecord({ id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as Client);
@@ -105,14 +117,14 @@ export function ClientPortal({ user, services, onLogout, isGalleryOpen, setIsGal
     
     try {
       // Mark proofOfPaymentSubmitted as true in Firestore
-      await updateDoc(doc(db, 'bookings', booking.id), {
+      await updateDoc(doc(db, getTenantCollectionPath('bookings'), booking.id), {
         proofOfPaymentSubmitted: true
       });
       
       const parsedServices = booking.serviceNames.join(', ');
       const textMessage = `Hi! Here is my proof of payment for booking *${booking.referenceNumber}* for R${booking.totalPrice} (${parsedServices}) on ${booking.date} at ${booking.time}.`;
       
-      const whatsappUrl = `https://wa.me/${tenant.whatsappPhone}?text=${encodeURIComponent(textMessage)}`;
+      const whatsappUrl = `https://wa.me/${resolvedTenant.whatsappPhone}?text=${encodeURIComponent(textMessage)}`;
       
       toast.info('Sending proof of payment. This will open WhatsApp...');
       window.open(whatsappUrl, '_blank', 'referrer');
@@ -127,7 +139,7 @@ export function ClientPortal({ user, services, onLogout, isGalleryOpen, setIsGal
     const confirm = window.confirm("Are you sure you want to cancel this booking?");
     if (!confirm) return;
     try {
-      await updateDoc(doc(db, 'bookings', booking.id), {
+      await updateDoc(doc(db, getTenantCollectionPath('bookings'), booking.id), {
         status: 'cancelled',
         cancelledAt: new Date().toISOString(),
         cancellationReason: 'Cancelled by client via Client Portal'
@@ -142,10 +154,10 @@ export function ClientPortal({ user, services, onLogout, isGalleryOpen, setIsGal
       // Refund loyalty points if redeemed
       if (booking.pointsRedeemed && booking.pointsRedeemed > 0 && !booking.pointsRefunded) {
         if (clientRecord && clientRecord.id) {
-          await updateDoc(doc(db, 'clients', clientRecord.id), {
+          await updateDoc(doc(db, getTenantCollectionPath('clients'), clientRecord.id), {
             loyaltyPoints: (clientRecord.loyaltyPoints || 0) + booking.pointsRedeemed
           });
-          await updateDoc(doc(db, 'bookings', booking.id), {
+          await updateDoc(doc(db, getTenantCollectionPath('bookings'), booking.id), {
             pointsRefunded: true
           });
           toast.success(`Refunded ${booking.pointsRedeemed} loyalty points!`);
@@ -154,11 +166,11 @@ export function ClientPortal({ user, services, onLogout, isGalleryOpen, setIsGal
       // Reverse points if completed (should not normally happen but safe)
       if (booking.pointsAwarded && (booking.pointsEarned || 0) > 0) {
         if (clientRecord && clientRecord.id) {
-          await updateDoc(doc(db, 'clients', clientRecord.id), {
+          await updateDoc(doc(db, getTenantCollectionPath('clients'), clientRecord.id), {
             loyaltyPoints: Math.max(0, (clientRecord.loyaltyPoints || 0) - booking.pointsEarned!)
           });
         }
-        await updateDoc(doc(db, 'bookings', booking.id), {
+        await updateDoc(doc(db, getTenantCollectionPath('bookings'), booking.id), {
           pointsAwarded: false,
           pointsEarned: 0
         });
@@ -180,7 +192,7 @@ export function ClientPortal({ user, services, onLogout, isGalleryOpen, setIsGal
       if (!booking) return;
 
       // Update booking
-      await updateDoc(doc(db, 'bookings', bookingId), {
+      await updateDoc(doc(db, getTenantCollectionPath('bookings'), bookingId), {
         date: newDate,
         time: newTime,
         status: 'pending' // Admin will confirm the new slot
